@@ -1,0 +1,162 @@
+---
+title: "Data Wrangling in R"
+author: "Business Analytics Club _ Nam Tran"
+format: docx
+editor: visual
+---
+
+*Import some packages*
+
+```{r}
+pacman::p_load(pacman, tidyverse, magrittr, car, datasets, skimr, psych, quantmod, xts)
+
+```
+
+[**How to treat missing values in R?**]{.underline}
+
+-   There are multiple ways to treat missing values. It largely depends on the characteristics of the given dataset.
+
+[Data used: car]{.underline}
+
+-   This is a default dataset from package 'datasets'
+
+<!-- -->
+
+-   The data give the speed of cars and the distances taken to stop. Note that the data were recorded in the 1920s. Speed is measured in mph, and distance is measured in miles
+
+```{r}
+# save dataset cars as df 
+df <- cars
+
+# Creating some NA values since the original car dataset has no NA values
+df[2,2]  <-  NA
+df[30,2] <- NA
+df[10,2] <- NA
+```
+
+1.  [Using mean/median]{.underline}
+
+```{r}
+# Show NA's locations
+df %>% 
+  filter(is.na(dist))
+
+# Mean
+mean_dist <- mean(df$dist, na.rm = T)
+
+df$dist <- with(df, ifelse(is.na(dist),
+                           mean_dist,
+                           dist))
+
+# Median 
+median_dist <- median(df$dist, na.rm = T)
+
+df$dist <- with(df, ifelse(is.na(dist),
+                           median_dist, 
+                           dist))
+
+# A more coding general method
+# for (i in 1:nrow(df)) {
+#   df[i,2] <- if (is.na(df[i,2]))
+#                   mean(df[,2], na.rm = T)
+#               else
+#                   df[i,2]
+# }
+```
+
+2.  [Using mean of other feature's subset]{.underline}
+
+-   In this demonstration, NA distance will be replace by average distance of the corresponding speed.
+
+```{r}
+
+# Convert speed into factor since we are grouping speed together.
+df %<>% 
+  mutate(
+    speed = as.factor(speed)
+  )
+
+# Create a df that contain non-NA values
+df_na_rm <- 
+  df %>%  
+  filter(complete.cases(.))
+
+speed_avg <- df %>%
+  group_by(speed) %>%
+  summarize(avg = mean(dist))
+
+# Replace NA values by its corresonding value in the speed_avg table
+
+for (i in 1:nrow(df)) {
+  df[i, 2] <-if (is.na(df[i, 2]))
+             (subset(speed_avg, speed == df[i, 1]))[, 2]
+             else
+             df[i, 2]
+}
+
+```
+
+3.  [Replace by the most recent non-NA values]{.underline}
+
+-   More applicable in time series dataset
+
+```{r}
+
+# Creating an environment to store the porfolio
+portfolio <- new.env()
+
+# Get data for Apple and amazon stocks
+getSymbols(
+  c('AAPL', 'AMZN'),
+  from = as.Date('2017-01-01'),
+  to = as.Date('2022-01-01'),
+  periodicity = 'daily',
+  env = portfolio
+)
+
+# Get adjusted price for the Apple and Amazon only, then merge the two dataset together
+porfolio_adj <- do.call(merge, eapply(portfolio, Ad))
+
+
+# Remove an observation in row 3th, column 2nd 
+
+porfolio_adj[3,2] <- NA
+
+porfolio_adj %<>% na.locf()
+```
+
+4.  [Just remove the entire row that contains missing values]{.underline}
+
+```{r}
+
+df %>%
+  na.omit()
+
+
+```
+
+5.  [Build a model to predict NA's values]{.underline}
+
+    ```{r}
+
+    df <- cars
+
+    # Creating NA values again 
+
+    df[2,2]  <-  NA
+    df[30,2] <- NA
+    df[10,2] <- NA
+
+
+    #Build regression model 
+
+    na_pred <- lm(data = df, dist ~ speed)
+
+    # Loop over each observation, if there are any rows that contain null values, it will use the model above to predict the NA values. 
+
+    for (i in 1:nrow(df)){
+      df[i,2] <- ifelse(is.na(df[i,2]),
+                             predict(na_pred, newdata = data.frame(speed = df[i,1])),
+                             df[i,2])
+    }
+    ```
